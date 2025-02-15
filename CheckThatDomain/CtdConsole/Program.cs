@@ -4,6 +4,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using Microsoft.VisualBasic;
 using OfficeOpenXml;
 using OfficeOpenXml.Table;
 
@@ -37,7 +38,7 @@ namespace CtdConsole
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial; // For EPPlus in .NET 5+
 
             var domainCheckResults = new Dictionary<string, Dictionary<string, string>>();
-            string[] extensions;
+            Dictionary<int,string> extensions = new();
 
             using (var package = new ExcelPackage(new FileInfo(filePath)))
             {
@@ -47,14 +48,23 @@ namespace CtdConsole
                     Console.WriteLine("Error: No worksheet found in the Excel file.");
                     return;
                 }
-
                 // Read extensions from the first row (excluding the first column)
-                extensions = worksheet.Cells[1, 2, 1, worksheet.Dimension.End.Column]
-                                      .Select(cell => cell.Text.Trim().ToLower())
-                                      .Where(ext => !string.IsNullOrWhiteSpace(ext))
-                                      .ToArray();
+                foreach (var cell in worksheet.Cells[1, 2, 1, worksheet.Dimension.End.Column])
+                {
+                    var cellText = cell.Text.Trim().ToLower();
+                    if (!string.IsNullOrWhiteSpace(cellText) && cellText.StartsWith('.'))
+                    {
+                        extensions[cell.Start.Column] = cellText;
+                    }
 
-                if (extensions.Length == 0)
+                }
+               
+                //extensions = worksheet.Cells[1, 2, 1, worksheet.Dimension.End.Column]
+                //                      .Select(cell => cell.Text.Trim().ToLower())
+                //                      .Where(ext => !string.IsNullOrWhiteSpace(ext) && ext.StartsWith('.'))
+                //                      .ToArray();
+
+                if (extensions.Count == 0)
                 {
                     Console.WriteLine("No valid extensions found in the Excel file.");
                     return;
@@ -67,11 +77,11 @@ namespace CtdConsole
                     if (string.IsNullOrWhiteSpace(domain)) continue;
 
                     domainCheckResults[domain] = new Dictionary<string, string>();
-
-                    for (int col = 2; col <= worksheet.Dimension.End.Column; col++)
+                    foreach (var extKv in extensions)
+                        //for (int col = 2; col <= worksheet.Dimension.End.Column; col++)
                     {
-                        string ext = extensions[col - 2];
-                        string status = worksheet.Cells[row, col].Text.Trim();
+                        string ext = extKv.Value;
+                        string status = worksheet.Cells[row, extKv.Key].Text.Trim();
                         domainCheckResults[domain][ext] = status;
                     }
                 }
@@ -82,13 +92,13 @@ namespace CtdConsole
             // ----------------------------------------------------------------
             foreach (var domain in domainCheckResults.Keys.ToList())
             {
-                foreach (var ext in extensions)
+                foreach (var extKv in extensions)
                 {
-                    if (string.IsNullOrWhiteSpace(domainCheckResults[domain][ext]))
+                    if (string.IsNullOrWhiteSpace(domainCheckResults[domain][extKv.Value]))
                     {
-                        string fullDomain = $"{domain}.{ext}";
+                        string fullDomain = $"{domain}{extKv.Value}";
                         bool isAvailable = CheckDomainAvailability(fullDomain);
-                        domainCheckResults[domain][ext] = isAvailable ? "Not Registered" : "Registered";
+                        domainCheckResults[domain][extKv.Value] = isAvailable ? "Not Registered" : "Registered";
                         Console.WriteLine($"[{(isAvailable ? "NOT REGISTERED" : "REGISTERED")}] {fullDomain}");
                     }
                 }
@@ -111,10 +121,11 @@ namespace CtdConsole
                 for(var rowIndex = row;rowIndex<=lastRow;rowIndex++)
                 {
                     var domain = worksheet.Cells[rowIndex, 1].Text.Trim();
-                    for (int col = 2; col <= extensions.Length + 1; col++)
+                    foreach (var extKv in extensions)
                     {
-                        string ext = extensions[col - 2];
-                        worksheet.Cells[rowIndex, col].Value = domainCheckResults[domain][ext];
+                        string ext = extKv.Value;
+                        if(!domainCheckResults[domain].ContainsKey(ext)) continue;
+                        worksheet.Cells[rowIndex, extKv.Key].Value = domainCheckResults[domain][ext];
                     }
                 }
 
