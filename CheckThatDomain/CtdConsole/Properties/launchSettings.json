@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "CtdConsole": {
-      "commandName": "Project",
-      "commandLineArgs": "\"C:\\DNSCheck\\dnsnames.xlsx\""
-    }
-  }
-}
